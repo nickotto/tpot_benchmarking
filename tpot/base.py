@@ -35,11 +35,14 @@ from multiprocessing import cpu_count
 import os
 import re
 import errno
+import time
+import psutil
 
 from tempfile import mkdtemp
 from shutil import rmtree
 
 import numpy as np
+import pandas as pd
 from pandas import DataFrame
 from scipy import sparse
 import deap
@@ -127,6 +130,9 @@ class TPOTBase(BaseEstimator):
         verbosity=0,
         disable_update_check=False,
         log_file=None,
+        track_fitnesses=True,
+        track_generations=True,
+        resource_logging=True
     ):
         """Set up the genetic programming algorithm for pipeline optimization.
 
@@ -276,6 +282,12 @@ class TPOTBase(BaseEstimator):
             Flag indicating whether the TPOT version checker should be disabled.
         log_file: string, io.TextIOWrapper or io.StringIO, optional (defaul: sys.stdout)
             Save progress content to a file.
+        track_fitnesses: boolean,
+            If True, the fitness of the individuals will be recorded to a dictionary that can be dumped
+            at the end of the fitting procedure.
+        track_generations: boolean,
+            If True, the fitnesses of the offspring individuals and their parents are recorded.
+            At the end of the fitting procedure, the pandas DataFrame can be dumped to a file
 
         Returns
         -------
@@ -309,6 +321,12 @@ class TPOTBase(BaseEstimator):
         self.disable_update_check = disable_update_check
         self.random_state = random_state
         self.log_file = log_file
+        self.fitness_tracker_dict = {'operator_count': [], 'score': [], 'generation': []} if track_fitnesses else None
+        self.current_gen = 0
+        self.parents_fitnesses = [] if track_generations else None
+        self.offspring_fitnesses = [] if track_generations else None
+        self.memory_logger = {'gen': [], 'usage': []} if resource_logging else None
+        self.time_logger = {'gen': [], 'time': []} if resource_logging else None
 
     def _setup_template(self, template):
         self.template = template
@@ -826,6 +844,7 @@ class TPOTBase(BaseEstimator):
                     verbose=self.verbosity,
                     per_generation_function=self._check_periodic_pipeline,
                     log_file=self.log_file_,
+                    parents_fitnesses=self.parents_fitnesses,
                 )
 
         # Allow for certain exceptions to signal a premature fit() cancellation
@@ -1493,9 +1512,6 @@ class TPOTBase(BaseEstimator):
         # Evaluate the individuals with an invalid fitness
         individuals = [ind for ind in population if not ind.fitness.valid]
         num_population = len(population)
-        # update pbar for valid individuals (with fitness values)
-        if self.verbosity > 0:
-            self._pbar.update(num_population - len(individuals))
 
         (
             operator_counts,
@@ -1521,6 +1537,8 @@ class TPOTBase(BaseEstimator):
 
         result_score_list = []
 
+        if self.time_logger is not None:
+            start = time.time()
         try:
             # check time limit before pipeline evaluation
             self._stop_by_max_time_mins()
@@ -1607,6 +1625,16 @@ class TPOTBase(BaseEstimator):
             self._pop = population
             raise KeyboardInterrupt
 
+        if self.memory_logger is not None:
+            process = psutil.Process(os.getpid())
+            usage = process.memory_info().rss / float(2 ** 20)
+            self.memory_logger['gen'].append(self.current_gen)
+            self.memory_logger['usage'].append(usage)
+        if self.time_logger is not None:
+            end = time.time()
+            self.time_logger['gen'].append(self.current_gen)
+            self.time_logger['time'].append(end - start)
+
         self._update_evaluated_individuals_(
             result_score_list, eval_individuals_str, operator_counts, stats_dicts
         )
@@ -1617,8 +1645,13 @@ class TPOTBase(BaseEstimator):
                 self.evaluated_individuals_[ind_str]["operator_count"],
                 self.evaluated_individuals_[ind_str]["internal_cv_score"],
             )
-        individuals = [ind for ind in population if not ind.fitness.valid]
+        population = individuals  # Operation necessary due to Python's shadow reference copy
         self._pareto_front.update(population)
+        if self.fitness_tracker_dict is not None:
+            self._update_tracker(population)
+        if self.offspring_fitnesses is not None:
+            self._update_offspring_fitnesses(population)
+        self.current_gen += 1
 
         return population
 
@@ -1777,6 +1810,47 @@ class TPOTBase(BaseEstimator):
                 self._pbar.write(pbar_msg, file=self.log_file_)
             if not self._pbar.disable:
                 self._pbar.update(pbar_num)
+
+    def _update_tracker(self, population):
+        for ind in population:
+            self.fitness_tracker_dict['operator_count'].append(ind.fitness.values[0])
+            self.fitness_tracker_dict['score'].append(ind.fitness.values[1])
+            self.fitness_tracker_dict['generation'].append(self.current_gen)
+
+    def _update_offspring_fitnesses(self, population):
+        for ind in population:
+            self.offspring_fitnesses.append((ind.fitness.values[1],))
+
+    def dump_fitness_tracker(self, dump_file):
+        df = pd.DataFrame(self.fitness_tracker_dict)
+        df.to_csv(dump_file, sep=',', index=False)
+
+    def dump_parents_offspring_fitnesses(self, dump_file):
+        # In generation 0, the parents are not tracked since they do not exist, but the offspring is tracked
+        mut_record = {'parent': [], 'offspring': [], 'gen': []}
+        cx_record = {'parent1': [], 'parent2': [], 'offspring': [], 'gen': []}
+        for i, (parent, offspring) in enumerate(zip(self.parents_fitnesses,
+                                                    self.offspring_fitnesses[self.population_size:])):
+            gen = i // self.population_size + 1
+            if len(parent) == 1:
+                mut_record['parent'].append(parent[0])
+                mut_record['offspring'].append(offspring[0])
+                mut_record['gen'].append(gen)
+            else:
+                cx_record['parent1'].append(parent[0])
+                cx_record['parent2'].append(parent[1])
+                cx_record['offspring'].append(offspring[0])
+                cx_record['gen'].append(gen)
+        df = pd.DataFrame(mut_record)
+        df.to_csv(f"{dump_file}_mutation.csv", sep=',', index=False)
+        df = pd.DataFrame(cx_record)
+        df.to_csv(f"{dump_file}_crossover.csv", sep=',', index=False)
+
+    def dump_resource_logging(self, dump_file):
+        df = pd.DataFrame(self.time_logger)
+        df.to_csv(f"{dump_file}_time.csv", sep=',', index=False)
+        df = pd.DataFrame(self.memory_logger)
+        df.to_csv(f"{dump_file}_memory.csv", sep=',', index=False)
 
     @_pre_test
     def _mate_operator(self, ind1, ind2):

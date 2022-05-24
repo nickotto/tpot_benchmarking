@@ -72,7 +72,7 @@ def pick_two_individuals_eligible_for_crossover(population):
     return population[idx1], population[idx2]
 
 
-def mutate_random_individual(population, toolbox):
+def mutate_random_individual(population, toolbox, parents_fitnesses=None):
     """Picks a random individual from the population, and performs mutation on a copy of it.
 
     Parameters
@@ -85,14 +85,16 @@ def mutate_random_individual(population, toolbox):
         An individual which is a mutated copy of one of the individuals in population,
         the returned individual does not have fitness.values
     """
-    idx = np.random.randint(0,len(population))
+    idx = np.random.randint(0, len(population))
     ind = population[idx]
+    if parents_fitnesses is not None:
+        parents_fitnesses.append((ind.fitness.values[1], ))
     ind, = toolbox.mutate(ind)
     del ind.fitness.values
     return ind
 
 
-def varOr(population, toolbox, lambda_, cxpb, mutpb):
+def varOr(population, toolbox, lambda_, cxpb, mutpb, parents_fitnesses=None):
     """Part of an evolutionary algorithm applying only the variation part
     (crossover, mutation **or** reproduction). The modified individuals have
     their fitness invalidated. The individuals are cloned so returned
@@ -131,15 +133,17 @@ def varOr(population, toolbox, lambda_, cxpb, mutpb):
         if op_choice < cxpb:  # Apply crossover
             ind1, ind2 = pick_two_individuals_eligible_for_crossover(population)
             if ind1 is not None:
+                if parents_fitnesses is not None:
+                    parents_fitnesses.append((ind1.fitness.values[1], ind2.fitness.values[1]))
                 ind1, _ = toolbox.mate(ind1, ind2)
                 del ind1.fitness.values
             else:
                 # If there is no pair eligible for crossover, we still want to
                 # create diversity in the population, and do so by mutation instead.
-                ind1 = mutate_random_individual(population, toolbox)
+                ind1 = mutate_random_individual(population, toolbox, parents_fitnesses)
             offspring.append(ind1)
         elif op_choice < cxpb + mutpb:  # Apply mutation
-            ind = mutate_random_individual(population, toolbox)
+            ind = mutate_random_individual(population, toolbox, parents_fitnesses)
             offspring.append(ind)
         else:  # Apply reproduction
             idx = np.random.randint(0, len(population))
@@ -172,7 +176,8 @@ def initialize_stats_dict(individual):
 
 def eaMuPlusLambda(population, toolbox, mu, lambda_, cxpb, mutpb, ngen, pbar,
                    stats=None, halloffame=None, verbose=0,
-                   per_generation_function=None, log_file=None):
+                   per_generation_function=None, log_file=None,
+                   parents_fitnesses=None):
     """This is the :math:`(\mu + \lambda)` evolutionary algorithm.
     :param population: A list of individuals.
     :param toolbox: A :class:`~deap.base.Toolbox` that contains the evolution
@@ -233,7 +238,7 @@ def eaMuPlusLambda(population, toolbox, mu, lambda_, cxpb, mutpb, ngen, pbar,
     # Begin the generational process
     for gen in range(1, ngen + 1):
         # Vary the population
-        offspring = varOr(population, toolbox, lambda_, cxpb, mutpb)
+        offspring = varOr(population, toolbox, lambda_, cxpb, mutpb, parents_fitnesses)
 
 
         # Update generation statistic for all individuals which have invalid 'generation' stats
