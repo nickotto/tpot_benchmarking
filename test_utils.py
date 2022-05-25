@@ -20,7 +20,7 @@ def extract_labels(df, labelname):
 
 
 def get_optimizer(classification,
-                  gens=10,
+                  gens=2,
                   pop_size=10,
                   offspr_size=10,
                   mr=0.9,
@@ -29,7 +29,7 @@ def get_optimizer(classification,
                   cv=5,
                   n_jobs=1,
                   maxtmins=10,
-                  verbosity=1,
+                  verbosity=2,
                   track_fitnesses=False,
                   track_generations=False,
                   resource_logging=False):
