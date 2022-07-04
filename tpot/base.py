@@ -37,6 +37,7 @@ import re
 import errno
 import time
 import psutil
+import math
 
 from tempfile import mkdtemp
 from shutil import rmtree
@@ -87,6 +88,8 @@ from .gp_types import Output_Array
 from .gp_deap import (
     eaMuPlusLambda,
     mutNodeReplacement,
+    mutPrimitiveReplacement,
+    mutTerminalReplacement,
     _wrapped_cross_val_score,
     cxOnePoint,
 )
@@ -130,9 +133,11 @@ class TPOTBase(BaseEstimator):
         verbosity=0,
         disable_update_check=False,
         log_file=None,
-        track_fitnesses=True,
-        track_generations=True,
-        resource_logging=True
+        track_fitnesses=False,
+        track_generations=False,
+        resource_logging=False,
+        test_x = None,
+        test_y = None
     ):
         """Set up the genetic programming algorithm for pipeline optimization.
 
@@ -323,10 +328,13 @@ class TPOTBase(BaseEstimator):
         self.log_file = log_file
         self.fitness_tracker_dict = {'operator_count': [], 'score': [], 'generation': []} if track_fitnesses else None
         self.current_gen = 0
+        self.pareto_fitness_tracker_dict = {'pipeline': [], 'cv_score': [], 'generation': [], 'holdout_score': []} if track_fitnesses else None
         self.parents_fitnesses = [] if track_generations else None
         self.offspring_fitnesses = [] if track_generations else None
         self.memory_logger = {'gen': [], 'usage': []} if resource_logging else None
         self.time_logger = {'gen': [], 'time': []} if resource_logging else None
+        self.test_x = test_x
+        self.test_y = test_y
 
     def _setup_template(self, template):
         self.template = template
@@ -576,6 +584,8 @@ class TPOTBase(BaseEstimator):
         )
         self._toolbox.register("compile", self._compile_to_sklearn)
         self._toolbox.register("select", tools.selNSGA2)
+        #self._toolbox.register("select", tools.selLexicase)
+        #self._toolbox.register("select", tools.selAutomaticEpsilonLexicase)
         self._toolbox.register("mate", self._mate_operator)
         if self.tree_structure:
             self._toolbox.register(
@@ -646,6 +656,7 @@ class TPOTBase(BaseEstimator):
         self._fitted_imputer = None
         self._imputed = False
         self._memory = None  # initial Memory setting for sklearn pipeline
+        self.pareto_front_fitted_pipelines_ = {} #keep pareto_front_pipelines 
 
         # dont save periodic pipelines more often than this
         self._output_best_pipeline_period_seconds = 30
@@ -1024,8 +1035,6 @@ class TPOTBase(BaseEstimator):
                 print("Best pipeline:", optimized_pipeline_str)
 
             # Store and fit the entire Pareto front as fitted models for convenience
-            self.pareto_front_fitted_pipelines_ = {}
-
             for pipeline in self._pareto_front.items:
                 self.pareto_front_fitted_pipelines_[
                     str(pipeline)
@@ -1649,6 +1658,8 @@ class TPOTBase(BaseEstimator):
         self._pareto_front.update(population)
         if self.fitness_tracker_dict is not None:
             self._update_tracker(population)
+        if self.pareto_fitness_tracker_dict is not None:
+            self._update_pareto_tracker(features,target)
         if self.offspring_fitnesses is not None:
             self._update_offspring_fitnesses(population)
         self.current_gen += 1
@@ -1817,12 +1828,44 @@ class TPOTBase(BaseEstimator):
             self.fitness_tracker_dict['score'].append(ind.fitness.values[1])
             self.fitness_tracker_dict['generation'].append(self.current_gen)
 
+    def _update_pareto_tracker(self,features,target):
+        if self._pareto_front is not None:
+            for pipeline, pipeline_scores in zip(
+                self._pareto_front.items, reversed(self._pareto_front.keys)
+            ):
+                self.pareto_fitness_tracker_dict['pipeline'].append(pipeline)
+                self.pareto_fitness_tracker_dict['cv_score'].append(pipeline_scores.wvalues[1])
+                self.pareto_fitness_tracker_dict['generation'].append(self.current_gen)
+
+                sklearn_pipeline = self._toolbox.compile(expr=pipeline)
+                sklearn_pipeline.fit(features, target)
+                if isinstance(self.scoring_function, str):
+                    scorer = SCORERS[self.scoring_function]
+                elif callable(self.scoring_function):
+                    scorer = self.scoring_function
+                else:
+                    raise RuntimeError(
+                        "The scoring function should either be the name of a scikit-learn scorer or a scorer object"
+                    )
+                score = scorer(
+                    sklearn_pipeline,
+                    self.test_x.astype(np.float64),
+                    self.test_y.astype(np.float64),
+                )
+                self.pareto_fitness_tracker_dict['holdout_score'].append(score)
+                
+    
+
     def _update_offspring_fitnesses(self, population):
         for ind in population:
             self.offspring_fitnesses.append((ind.fitness.values[1],))
 
     def dump_fitness_tracker(self, dump_file):
         df = pd.DataFrame(self.fitness_tracker_dict)
+        df.to_csv(dump_file, sep=',', index=False)
+
+    def dump_pareto_fitness_tracker(self, dump_file):
+        df = pd.DataFrame(self.pareto_fitness_tracker_dict)
         df.to_csv(dump_file, sep=',', index=False)
 
     def dump_parents_offspring_fitnesses(self, dump_file):
@@ -1851,6 +1894,12 @@ class TPOTBase(BaseEstimator):
         df.to_csv(f"{dump_file}_time.csv", sep=',', index=False)
         df = pd.DataFrame(self.memory_logger)
         df.to_csv(f"{dump_file}_memory.csv", sep=',', index=False)
+
+
+
+    def gaussian_threshold(self,generation,score_delta):
+        return 0.85*(1/math.exp(0.05*(generation-3)**2+0.1*(1-score_delta)**2)) + 0.15
+
 
     @_pre_test
     def _mate_operator(self, ind1, ind2):
@@ -1915,6 +1964,20 @@ class TPOTBase(BaseEstimator):
                 mutation_techniques.append(partial(gp.mutShrink))
         else:
             mutation_techniques = [partial(mutNodeReplacement, pset=self._pset)]
+
+        '''
+        fitness_rand = np.random.random()
+        if len(self.parents_fitnesses) > 0 and len(self.offspring_fitnesses) > 0:
+            score_delta = sum([y[0] for y in self.offspring_fitnesses]) / len(self.offspring_fitnesses) - sum([y[0] for y in self.parents_fitnesses]) / len(self.parents_fitnesses) 
+        else:
+            score_delta = 0
+        fitness_threshold = self.gaussian_threshold(self.current_gen,score_delta)
+        if fitness_rand < fitness_threshold:
+            mutation_techniques.append(partial(mutPrimitiveReplacement, pset=self._pset))
+        else:
+            mutation_techniques.append(partial(mutTerminalReplacement, pset=self._pset))
+        
+        '''
 
         mutator = np.random.choice(mutation_techniques)
 

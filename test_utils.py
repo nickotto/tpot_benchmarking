@@ -32,7 +32,9 @@ def get_optimizer(classification,
                   verbosity=2,
                   track_fitnesses=False,
                   track_generations=False,
-                  resource_logging=False):
+                  resource_logging=False,
+                  test_x=None,
+                  test_y=None):
     # hp_opt_iterations and hp_opt_mutate_prob are shared among hp tuning each iteration and hp tuning final population
     # hp_improvs_tracker tracks both the hp tuning during each generation and for the final population
     if classification:
@@ -41,12 +43,12 @@ def get_optimizer(classification,
                                             mutation_rate=mr, crossover_rate=cr, scoring=scoring,
                                             cv=cv, n_jobs=n_jobs, max_eval_time_mins=maxtmins, verbosity=verbosity,
                                             track_fitnesses=track_fitnesses, track_generations=track_generations,
-                                            resource_logging=resource_logging)
+                                            resource_logging=resource_logging, test_x = test_x, test_y = test_y)
     else:
         scoring = 'neg_mean_squared_error' if scoring is None else scoring
         pipeline_optimizer = TPOTRegressor(generations=gens, population_size=pop_size, offspring_size=offspr_size,
                                            mutation_rate=mr, crossover_rate=cr, scoring=scoring,
                                            cv=cv, n_jobs=n_jobs, max_eval_time_mins=maxtmins, verbosity=verbosity,
                                            track_fitnesses=track_fitnesses, track_generations=track_generations,
-                                           resource_logging=resource_logging)
+                                           resource_logging=resource_logging, test_x = test_x, test_y = test_y)
     return pipeline_optimizer
