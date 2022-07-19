@@ -9,7 +9,7 @@ import random
 import numpy as np
 
 import sys
-sys.path.append('/common/matsumoton/git/digen')
+sys.path.append('./digen')
 from digen import Benchmark
 
 if __name__ == "__main__":
@@ -44,40 +44,28 @@ if __name__ == "__main__":
     benchmark=Benchmark()
     args.dataset=benchmark.load_dataset('digen'+str(args.dataset_num))
 
-    random.seed(5)
-    np.random.seed(5)
+    #random.seed(5)
+    #np.random.seed(5)
+    for gen in range(2,11):
+        for idx_run in range(args.runstart, args.runend):
+            print(idx_run)
+            #df = pd.read_csv(args.dataset, sep=',')
+            dump_file_name = 'digen' + str(args.dataset_num) + '_run_' +str(idx_run)
+            X, Y = extract_labels(args.dataset, args.labelname)
+            X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.8,random_state=5)
 
-    for idx_run in range(args.runstart, args.runend):
-        print(idx_run)
-        #df = pd.read_csv(args.dataset, sep=',')
-        dump_file_name = 'digen' + str(args.dataset_num) + '_run_' +str(idx_run)
-        X, Y = extract_labels(args.dataset, args.labelname)
-        X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.8,random_state=5)
+            pipeline_optimizer = get_optimizer(args.classification, gens=args.gen - 1, pop_size=args.pop,
+                                            offspr_size=args.pop, scoring=args.scoring, track_fitnesses=True,
+                                            track_generations=True, resource_logging=True)
+            pipeline_optimizer.fit(X_train, Y_train)
 
-        pipeline_optimizer = get_optimizer(args.classification, gens=args.gen, pop_size=args.pop_random_sampling,
-                                           offspr_size=args.pop_random_sampling, scoring=args.scoring,
-                                           track_fitnesses=True,track_generations=True,resource_logging=True)
-        pipeline_optimizer.fit(X_train, Y_train)
-
-        print("Tpot fit executed. Dumping evolution data into csv")
-        no_ev_dump_file = f"{gen_fitnesses_dir}/{dump_file_name}_no_evolution_pop{args.pop_random_sampling}_gen0.csv"
-        pipeline_optimizer.dump_fitness_tracker(no_ev_dump_file)
-
-        with open(f"{pipeline_dir}/{dump_file_name}_gen0.pkl", 'wb') as outp:
-            pickle.dump(pipeline_optimizer, outp, -1)
-
-        # one generation is evaluated outside the number of generations (DEAP based)
-        pipeline_optimizer = get_optimizer(args.classification, gens=args.gen - 1, pop_size=args.pop,
-                                           offspr_size=args.pop, scoring=args.scoring, track_fitnesses=True,
-                                           track_generations=True, resource_logging=True)
-        pipeline_optimizer.fit(X_train, Y_train)
-
-        ev_dump_file = f"{gen_fitnesses_dir}/{dump_file_name}_evolution_pop{args.pop}_gen{args.gen}.csv"
-        offspring_dump_file = f"{offspring_dir}/{dump_file_name}_pop{args.pop}_gen{args.pop}"
-        resource_logging_dump_file = f"{resource_logging_dir}/{dump_file_name}_pop{args.pop}_gen{args.gen}"
-        pipeline_optimizer.dump_fitness_tracker(ev_dump_file)
-        pipeline_optimizer.dump_parents_offspring_fitnesses(offspring_dump_file)
-        pipeline_optimizer.dump_resource_logging(resource_logging_dump_file)
-
-        with open(f"{pipeline_dir}/{dump_file_name}_final.pkl", 'wb') as outp:
-            pickle.dump(pipeline_optimizer, outp, -1)
+            ev_dump_file = f"{gen_fitnesses_dir}/{dump_file_name}_evolution_pop{args.pop}_gen{args.gen}.csv"
+            offspring_dump_file = f"{offspring_dir}/{dump_file_name}_pop{args.pop}_gen{args.pop}"
+            resource_logging_dump_file = f"{resource_logging_dir}/{dump_file_name}_pop{args.pop}_gen{args.gen}"
+            pipeline_optimizer.dump_fitness_tracker(ev_dump_file)
+            pipeline_optimizer.dump_parents_offspring_fitnesses(offspring_dump_file)
+            pipeline_optimizer.dump_resource_logging(resource_logging_dump_file)
+            pipeline_optimizer.dump_pareto_fitness_tracker(ev_dump_file)
+            
+            #with open(f"{pipeline_dir}/{dump_file_name}_final.pkl", 'wb') as outp:
+            #    pickle.dump(pipeline_optimizer, outp, -1)
