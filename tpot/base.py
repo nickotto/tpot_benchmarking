@@ -137,8 +137,12 @@ class TPOTBase(BaseEstimator):
         track_generations=False,
         resource_logging=False,
         test_x = None,
+<<<<<<< HEAD
         test_y = None,
         dynamic_rates = True
+=======
+        test_y = None
+>>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
     ):
         """Set up the genetic programming algorithm for pipeline optimization.
 
@@ -329,17 +333,24 @@ class TPOTBase(BaseEstimator):
         self.log_file = log_file
         self.pareto_fitness_tracker_dict = {'pipeline': [], 'cv_score': [], 'generation': [], 'holdout_score': [], 'roc_auc' : []} 
         self.current_gen = 0
+<<<<<<< HEAD
         self.primitive_mutation_rate = [0.9]
         self.fitness_tracker_dict = {'operator_count': [], 'score': [], 'generation': []} if track_fitnesses else None
         
         self.crossover_mutation_tracker_dict = {'gen': [], 'crossover_rate' : [], 'mutation_rate' : []}
+=======
+        self.pareto_fitness_tracker_dict = {'pipeline': [], 'cv_score': [], 'generation': [], 'holdout_score': []} if track_fitnesses else None
+>>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
         self.parents_fitnesses = [] if track_generations else None
         self.offspring_fitnesses = [] if track_generations else None
         self.memory_logger = {'gen': [], 'usage': []} if resource_logging else None
         self.time_logger = {'gen': [], 'time': []} if resource_logging else None
         self.test_x = test_x
         self.test_y = test_y
+<<<<<<< HEAD
         self.dynamic_rates = dynamic_rates
+=======
+>>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
 
     def _setup_template(self, template):
         self.template = template
@@ -588,9 +599,15 @@ class TPOTBase(BaseEstimator):
             "population", tools.initRepeat, list, self._toolbox.individual
         )
         self._toolbox.register("compile", self._compile_to_sklearn)
+<<<<<<< HEAD
         #self._toolbox.register("select", tools.selNSGA2)
         #self._toolbox.register("select", tools.selLexicase)
         self._toolbox.register("select", tools.selAutomaticEpsilonLexicase)
+=======
+        self._toolbox.register("select", tools.selNSGA2)
+        #self._toolbox.register("select", tools.selLexicase)
+        #self._toolbox.register("select", tools.selAutomaticEpsilonLexicase)
+>>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
         self._toolbox.register("mate", self._mate_operator)
         if self.tree_structure:
             self._toolbox.register(
@@ -1664,6 +1681,8 @@ class TPOTBase(BaseEstimator):
         self._update_pareto_tracker(features,target)
         if self.fitness_tracker_dict is not None:
             self._update_tracker(population)
+        if self.pareto_fitness_tracker_dict is not None:
+            self._update_pareto_tracker(features,target)
         if self.offspring_fitnesses is not None:
             self._update_offspring_fitnesses(population)
         self.current_gen += 1
@@ -1841,6 +1860,7 @@ class TPOTBase(BaseEstimator):
                 self.pareto_fitness_tracker_dict['cv_score'].append(pipeline_scores.wvalues[1])
                 self.pareto_fitness_tracker_dict['generation'].append(self.current_gen)
 
+<<<<<<< HEAD
                 if self.test_x is not None and self.test_y is not None:
                     sklearn_pipeline = self._toolbox.compile(expr=pipeline)
                     sklearn_pipeline.fit(features, target)
@@ -1868,6 +1888,24 @@ class TPOTBase(BaseEstimator):
                 else: 
                     self.pareto_fitness_tracker_dict['holdout_score'].append(0)
                     self.pareto_fitness_tracker_dict['roc_auc'].append(0)
+=======
+                sklearn_pipeline = self._toolbox.compile(expr=pipeline)
+                sklearn_pipeline.fit(features, target)
+                if isinstance(self.scoring_function, str):
+                    scorer = SCORERS[self.scoring_function]
+                elif callable(self.scoring_function):
+                    scorer = self.scoring_function
+                else:
+                    raise RuntimeError(
+                        "The scoring function should either be the name of a scikit-learn scorer or a scorer object"
+                    )
+                score = scorer(
+                    sklearn_pipeline,
+                    self.test_x.astype(np.float64),
+                    self.test_y.astype(np.float64),
+                )
+                self.pareto_fitness_tracker_dict['holdout_score'].append(score)
+>>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
                 
     
 
@@ -1910,6 +1948,7 @@ class TPOTBase(BaseEstimator):
         df = pd.DataFrame(self.memory_logger)
         df.to_csv(f"{dump_file}_memory.csv", sep=',', index=False)
 
+<<<<<<< HEAD
     def dump_primitives_mutations(self,dump_file):
         df = pd.DataFrame(self.primitive_mutation_rate)
         df.to_csv(dump_file, sep=',', index=False)
@@ -1927,6 +1966,13 @@ class TPOTBase(BaseEstimator):
             score_delta = 0
         #return 0.85*(1/math.exp(0.05*(self.current_gen-3)**2+0.1*(1-score_delta)**2)) + 0.15
         self.primitive_mutation_rate.append(0.8*math.cos(0.23*self.current_gen -3.1415*(score_delta)/0.5)/2+0.5)
+=======
+
+
+    def gaussian_threshold(self,generation,score_delta):
+        return 0.85*(1/math.exp(0.05*(generation-3)**2+0.1*(1-score_delta)**2)) + 0.15
+
+>>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
 
     @_pre_test
     def _mate_operator(self, ind1, ind2):
@@ -2000,6 +2046,20 @@ class TPOTBase(BaseEstimator):
                 mutation_techniques.append(partial(mutTerminalReplacement, pset=self._pset))
         else:
             mutation_techniques.append(partial(mutNodeReplacement, pset=self._pset))    
+
+        '''
+        fitness_rand = np.random.random()
+        if len(self.parents_fitnesses) > 0 and len(self.offspring_fitnesses) > 0:
+            score_delta = sum([y[0] for y in self.offspring_fitnesses]) / len(self.offspring_fitnesses) - sum([y[0] for y in self.parents_fitnesses]) / len(self.parents_fitnesses) 
+        else:
+            score_delta = 0
+        fitness_threshold = self.gaussian_threshold(self.current_gen,score_delta)
+        if fitness_rand < fitness_threshold:
+            mutation_techniques.append(partial(mutPrimitiveReplacement, pset=self._pset))
+        else:
+            mutation_techniques.append(partial(mutTerminalReplacement, pset=self._pset))
+        
+        '''
 
         mutator = np.random.choice(mutation_techniques)
 
