@@ -138,7 +138,7 @@ class TPOTBase(BaseEstimator):
         resource_logging=False,
         test_x = None,
         test_y = None,
-        dynamic_rates = True
+        dynamic_rates = False
     ):
         """Set up the genetic programming algorithm for pipeline optimization.
 
@@ -327,7 +327,7 @@ class TPOTBase(BaseEstimator):
         self.disable_update_check = disable_update_check
         self.random_state = random_state
         self.log_file = log_file
-        self.pareto_fitness_tracker_dict = {'pipeline': [], 'cv_score': [], 'generation': [], 'holdout_score': []} 
+        self.pareto_fitness_tracker_dict = {'pipeline': [], 'cv_score': [], 'generation': [], 'holdout_score': [], 'holdout_roc_auc_score' : []} 
         self.current_gen = 0
         self.primitive_mutation_rate = [0.9]
         self.fitness_tracker_dict = {'operator_count': [], 'score': [], 'generation': []} if track_fitnesses else None
@@ -588,9 +588,9 @@ class TPOTBase(BaseEstimator):
             "population", tools.initRepeat, list, self._toolbox.individual
         )
         self._toolbox.register("compile", self._compile_to_sklearn)
-        #self._toolbox.register("select", tools.selNSGA2)
+        self._toolbox.register("select", tools.selNSGA2)
         #self._toolbox.register("select", tools.selLexicase)
-        self._toolbox.register("select", tools.selAutomaticEpsilonLexicase)
+        #self._toolbox.register("select", tools.selAutomaticEpsilonLexicase)
         self._toolbox.register("mate", self._mate_operator)
         if self.tree_structure:
             self._toolbox.register(
@@ -1858,8 +1858,15 @@ class TPOTBase(BaseEstimator):
                         self.test_y.astype(np.float64),
                     )
                     self.pareto_fitness_tracker_dict['holdout_score'].append(score)
+                    auc_score = SCORERS['roc_auc'](
+                        sklearn_pipeline,
+                        self.test_x.astype(np.float64),
+                        self.test_y.astype(np.float64),
+                    )
+                    self.pareto_fitness_tracker_dict['holdout_roc_auc_score'].append(auc_score)
                 else: 
                     self.pareto_fitness_tracker_dict['holdout_score'].append(0)
+                    self.pareto_fitness_tracker_dict['holdout_roc_auc_score'].append(0)
                 
     
 

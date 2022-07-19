@@ -95,12 +95,8 @@ def mutate_random_individual(population, toolbox, parents_fitnesses=None):
     return ind
 
 def crossover_sigmoid_threshold(generation):
-<<<<<<< HEAD
     #return 1/(1+math.exp(-0.5*(generation-8)))*0.9 + 0.1
     return 0.8*math.cos(0.23*generation+3.1415)/2+0.5
-=======
-    return 1/(1+math.exp(-0.5*(generation-8)))*0.9 + 0.1
->>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
 
 def varOr(population, toolbox, lambda_, cxpb, mutpb, gen, parents_fitnesses=None):
     """Part of an evolutionary algorithm applying only the variation part
@@ -136,10 +132,6 @@ def varOr(population, toolbox, lambda_, cxpb, mutpb, gen, parents_fitnesses=None
     1 - *cxpb* - *mutpb*.
     """
     offspring = []
-<<<<<<< HEAD
-=======
-    #cxpb = crossover_sigmoid_threshold(gen)
->>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
     mutpb = 1-cxpb
     for _ in range(lambda_):
         op_choice = np.random.random()
@@ -252,13 +244,10 @@ def eaMuPlusLambda(population, toolbox, mu, lambda_, cxpb, mutpb, ngen, pbar,
     # Begin the generational process
     for gen in range(1, ngen + 1):
         # Vary the population
-<<<<<<< HEAD
         
         #dynamic crossover
         cxpb = crossover_sigmoid_threshold(gen)
         
-=======
->>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
         offspring = varOr(population, toolbox, lambda_, cxpb, mutpb, gen, parents_fitnesses)
 
 
