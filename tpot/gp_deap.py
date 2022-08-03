@@ -37,7 +37,7 @@ from collections import defaultdict
 import warnings
 from stopit import threading_timeoutable, TimeoutException
 import random
-import tpot.config.classifier as classifier
+
 
 def pick_two_individuals_eligible_for_crossover(population):
     """Pick two individuals from the population which can do crossover, that is, they share a primitive.
