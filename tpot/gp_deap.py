@@ -36,7 +36,8 @@ from sklearn.base import clone
 from collections import defaultdict
 import warnings
 from stopit import threading_timeoutable, TimeoutException
-
+import random
+import tpot.config.classifier as classifier
 
 def pick_two_individuals_eligible_for_crossover(population):
     """Pick two individuals from the population which can do crossover, that is, they share a primitive.
@@ -331,6 +332,145 @@ def cxOnePoint(ind1, ind2):
         slice2 = ind2.searchSubtree(index2)
         ind1[slice1], ind2[slice2] = ind2[slice2], ind1[slice1]
 
+    return ind1, ind2
+
+def convert_to_type(strcandi,typetemp):
+    if typetemp=="int":
+        return int(strcandi)
+    elif typetemp=="float":
+        return float(strcandi)
+    elif typetemp=="boolean":
+        if strcandi=="True":
+            return True
+        elif strcandi=="False":
+            return False
+        else:
+            return None
+    else:
+        return None
+        
+def type_of_string(candi):
+    if candi.isnumeric():
+        return "int"
+    elif candi.isnumeric()==False:
+        try:
+            float(candi)
+            return "float"
+
+        except ValueError:
+            return "booleanOrClass"
+
+def closest_terminal(terminals,beta_ind1_value, beta_ind1_value_type):
+    diff=float("inf")
+    for ter in terminals:
+        hyp_value=ter.value.split("=")[-1]
+        if beta_ind1_value_type=="int":
+            hyp_value=int(hyp_value)
+        elif beta_ind1_value_type=="float":
+            hyp_value=float(hyp_value)
+        
+        if diff>abs(hyp_value-beta_ind1_value):
+            closest_terminal_ele=ter
+            diff=abs(hyp_value-beta_ind1_value)
+    
+    return closest_terminal_ele
+
+
+def cxHybridOnePoint(ind1, ind2, eta, pset):
+    """This function is based on cxOnePoint.
+    And simulated binary crossover is applied."""
+
+
+    """Randomly select in each individual and exchange each subtree with the
+    point as root between each individual.
+    :param ind1: First tree participating in the crossover.
+    :param ind2: Second tree participating in the crossover.
+    :eta: parameter used in the simulated binary crossover operator.
+    :pset: 
+    :returns: A tuple of two trees.
+    :
+    """
+    # List all available primitive types in each individual
+    types1 = defaultdict(list)
+    types2 = defaultdict(list)
+
+
+
+    for idx, node in enumerate(ind1[1:], 1):
+        types1[node.ret].append(idx)
+    common_types = []
+    for idx, node in enumerate(ind2[1:], 1):
+        if node.ret in types1 and node.ret not in types2:
+            common_types.append(node.ret)
+        types2[node.ret].append(idx)
+
+    if len(common_types) > 0:
+        # Select a random common type
+        type_ = np.random.choice(common_types)
+
+        
+        index1 = np.random.choice(types1[type_])
+        index2 = np.random.choice(types2[type_])
+
+        node1 = ind1[index1]
+        node2 = ind2[index2]
+
+        slice1 = ind1.searchSubtree(index1)
+        slice2 = ind2.searchSubtree(index2)
+
+        # When the selected node is a terminal, SBX is applied.
+        if node1.arity == 0 and node1.name != 'ARG0' and len(ind1[slice1])==1  and node2.arity == 0 and node2.name != 'ARG0' and len(ind2[slice2])==1 :
+               
+            ind1_value_string = ind1[slice1][0].value.split("=")
+            ind2_value_string = ind2[slice2][0].value.split("=")
+
+
+            # ExtraTreesClassifier__bootstrap=True
+            # ExtraTreesClassifier__bootstrap=False
+            # ExtraTreesClassifier__criterion=gini
+            # ExtraTreesClassifier__criterion=entropy
+
+            # check second value is float, int, or boolean
+            res1=type_of_string(ind1_value_string[1])
+            res2=type_of_string(ind2_value_string[1])
+            
+            if res1 != "booleanOrClass" and res2 != "booleanOrClass":                    
+                    
+                # convert with type
+                ind1_value_type = convert_to_type(ind1_value_string[1],res1)
+                ind2_value_type = convert_to_type(ind2_value_string[1],res2)
+
+
+                rand = random.random()
+                if rand <= 0.5:
+                    beta = 2. * rand
+                else:
+                    beta = 1. / (2. * (1. - rand))
+                beta **= 1. / (eta + 1.)
+                
+                beta_ind1_value_type = 0.5 * (((1 + beta) * ind1_value_type) + ((1 - beta) * ind2_value_type))
+                beta_ind2_value_type = 0.5 * (((1 - beta) * ind1_value_type) + ((1 + beta) * ind2_value_type))
+
+                cls_ter1=closest_terminal(pset.terminals[node1.ret],beta_ind1_value_type,res1)
+
+                if isclass(cls_ter1):
+                    cls_ter1 = cls_ter1()
+                ind1[index1] = cls_ter1
+
+                cls_ter2=closest_terminal(pset.terminals[node2.ret],beta_ind2_value_type,res2)
+
+                if isclass(cls_ter2):
+                    cls_ter2 = cls_ter2()
+                ind2[index2] = cls_ter2
+            
+            else:
+            # when both are boolean or class, do one point crossover.
+            # if res1 == "booleanOrClass" and res2 == "booleanOrClass":    
+                ind1[slice1], ind2[slice2] = ind2[slice2], ind1[slice1]
+        # when size of slices are different, do one point crossover.
+        else:
+            ind1[slice1], ind2[slice2] = ind2[slice2], ind1[slice1]
+        
     return ind1, ind2
 
 
