@@ -375,12 +375,6 @@ def closest_terminal(terminals,beta_ind1_value, beta_ind1_value_type):
     
     return closest_terminal_ele
 
-def is_applicable_to_SBX(node1_arity,node1_name, len_ind1_slice1, node2_arity, node2_name,len_ind2_slice2):
-    if node1_arity == 0 and node1_name != 'ARG0' and len_ind1_slice1==1  and node2_arity == 0 and node2_name != 'ARG0' and len_ind2_slice2==1:
-        return True
-    else:
-        return False
-
 
 def cxHybridOnePoint(ind1, ind2, eta, pset):
     """This function is based on cxOnePoint.
@@ -424,9 +418,9 @@ def cxHybridOnePoint(ind1, ind2, eta, pset):
         slice1 = ind1.searchSubtree(index1)
         slice2 = ind2.searchSubtree(index2)
 
-        is_applicable_to_SBX_Boolean=is_applicable_to_SBX(node1.arity,node1.name, len(ind1[slice1]), node2.arity, node2.name, len(ind2[slice2]))
+        
         # When the selected node is a terminal, SBX is applied.
-        if is_applicable_to_SBX_Boolean:
+        if node1.arity == 0 and node1.name != 'ARG0' and len(ind1[slice1])==1  and node2.arity == 0 and node2.name != 'ARG0' and len(ind2[slice2])==1 :
                
             ind1_value_string = ind1[slice1][0].value.split("=")
             ind2_value_string = ind2[slice2][0].value.split("=")
