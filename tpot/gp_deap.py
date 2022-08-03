@@ -39,6 +39,7 @@ from stopit import threading_timeoutable, TimeoutException
 import random
 
 
+
 def pick_two_individuals_eligible_for_crossover(population):
     """Pick two individuals from the population which can do crossover, that is, they share a primitive.
 
@@ -98,6 +99,82 @@ def mutate_random_individual(population, toolbox, parents_fitnesses=None):
 def crossover_sigmoid_threshold(generation):
     #return 1/(1+math.exp(-0.5*(generation-8)))*0.9 + 0.1
     return 0.8*math.cos(0.23*generation+3.1415)/2+0.5
+'''
+def varOr(population, toolbox, lambda_, cxpb, mutpb, gen, parents_fitnesses=None):
+    """Part of an evolutionary algorithm applying only the variation part
+    (crossover, mutation **or** reproduction). The modified individuals have
+    their fitness invalidated. The individuals are cloned so returned
+    population is independent of the input population.
+    :param population: A list of individuals to vary.
+    :param toolbox: A :class:`~deap.base.Toolbox` that contains the evolution
+                    operators.
+    :param lambda\_: The number of children to produce
+    :param cxpb: The probability of mating two individuals.
+    :param mutpb: The probability of mutating an individual.
+    :param gen: The current generation
+    :returns: The final population
+    :returns: A class:`~deap.tools.Logbook` with the statistics of the
+              evolution
+    The variation goes as follow. On each of the *lambda_* iteration, it
+    selects one of the three operations; crossover, mutation or reproduction.
+    In the case of a crossover, two individuals are selected at random from
+    the parental population :math:`P_\mathrm{p}`, those individuals are cloned
+    using the :meth:`toolbox.clone` method and then mated using the
+    :meth:`toolbox.mate` method. Only the first child is appended to the
+    offspring population :math:`P_\mathrm{o}`, the second child is discarded.
+    In the case of a mutation, one individual is selected at random from
+    :math:`P_\mathrm{p}`, it is cloned and then mutated using using the
+    :meth:`toolbox.mutate` method. The resulting mutant is appended to
+    :math:`P_\mathrm{o}`. In the case of a reproduction, one individual is
+    selected at random from :math:`P_\mathrm{p}`, cloned and appended to
+    :math:`P_\mathrm{o}`.
+    This variation is named *Or* beceause an offspring will never result from
+    both operations crossover and mutation. The sum of both probabilities
+    shall be in :math:`[0, 1]`, the reproduction probability is
+    1 - *cxpb* - *mutpb*.
+    """
+    offspring = []
+    mutpb = 1-cxpb
+    
+    for i in range(lambda_):
+        op_choice = np.random.random()
+        
+        #SHOULD BE REMOVE BELOW IT IS FOR TESTING
+        if op_choice < cxpb:  # Apply crossover
+            ind1, ind2 = pick_two_individuals_eligible_for_crossover(population)
+            # if ind1, which is not None, is retured by pick_two_individuals_eligible_for_crossover
+            if ind1 is not None:
+                if parents_fitnesses is not None:
+                    parents_fitnesses.append((ind1.fitness.values[1], ind2.fitness.values[1]))
+                # Show what is current 
+                mated_ind1, _, evaluated_individuals_ = toolbox.mate(ind1, ind2)
+
+                if str(ind1)==str(mated_ind1):
+                    mated_ind1 = mutate_random_individual(population, toolbox, parents_fitnesses)
+
+                del mated_ind1.fitness.values
+                offspring.append(mated_ind1)
+            # if ind1, which is None, is retured by pick_two_individuals_eligible_for_crossover, then we need to mutate to generate new ind
+            # if ind1 returned by toolbox.mate is in current evaluated_individuals_, then we need to mutate to generate new ind
+            if str(ind1) in evaluated_individuals_ or ind1 is None:  # Apply mutation
+                ind1 = mutate_random_individual(population, toolbox, parents_fitnesses)
+                
+            offspring.append(ind1)
+            
+            # else:
+            #     # If there is no pair eligible for crossover, we still want to
+            #     # create diversity in the population, and do so by mutation instead.
+            #     ind1 = mutate_random_individual(population, toolbox, parents_fitnesses)
+            # offspring.append(ind1)
+        elif op_choice < cxpb + mutpb:  # Apply mutation
+            ind = mutate_random_individual(population, toolbox, parents_fitnesses)
+            offspring.append(ind)
+        else:  # Apply reproduction
+            idx = np.random.randint(0, len(population))
+            offspring.append(toolbox.clone(population[idx]))
+
+    return offspring
+'''
 
 def varOr(population, toolbox, lambda_, cxpb, mutpb, gen, parents_fitnesses=None):
     """Part of an evolutionary algorithm applying only the variation part
@@ -136,22 +213,53 @@ def varOr(population, toolbox, lambda_, cxpb, mutpb, gen, parents_fitnesses=None
     mutpb = 1-cxpb
     for _ in range(lambda_):
         op_choice = np.random.random()
+    
         
         if op_choice < cxpb:  # Apply crossover
             ind1, ind2 = pick_two_individuals_eligible_for_crossover(population)
             if ind1 is not None:
                 if parents_fitnesses is not None:
                     parents_fitnesses.append((ind1.fitness.values[1], ind2.fitness.values[1]))
-                ind1, _ = toolbox.mate(ind1, ind2)
-                del ind1.fitness.values
+                ind1_cx, _, evaluated_individuals_= toolbox.mate(ind1, ind2)
+                del ind1_cx.fitness.values
+
+                if str(ind1_cx) in evaluated_individuals_:
+                    ind1_cx = mutate_random_individual(population, toolbox, parents_fitnesses)
+                offspring.append(ind1_cx)
+
+                pop_str_ind=[str(ind) for ind in population]
+                offspring_str_ind=[str(ind) for ind in offspring]
+                # intersect pop_str_ind and offspring_str_ind to find individuals that have been altered in the varOr function
+                intera_pop_offspring=list(set(pop_str_ind).intersection(set(offspring_str_ind)))
+                if len(intera_pop_offspring)>0:
+                    print("After crossover and mutation, there are common individuals in the population and offspring")
+
             else:
                 # If there is no pair eligible for crossover, we still want to
                 # create diversity in the population, and do so by mutation instead.
-                ind1 = mutate_random_individual(population, toolbox, parents_fitnesses)
-            offspring.append(ind1)
+                ind_mu = mutate_random_individual(population, toolbox, parents_fitnesses)
+                offspring.append(ind_mu)
+
+                pop_str_ind=[str(ind) for ind in population]
+                offspring_str_ind=[str(ind) for ind in offspring]
+                # intersect pop_str_ind and offspring_str_ind to find individuals that have been altered in the varOr function
+                intera_pop_offspring=list(set(pop_str_ind).intersection(set(offspring_str_ind)))
+                if len(intera_pop_offspring)>0:
+                    print("After mutation, there are common individuals in the population and offspring")
+
         elif op_choice < cxpb + mutpb:  # Apply mutation
             ind = mutate_random_individual(population, toolbox, parents_fitnesses)
             offspring.append(ind)
+            
+
+            pop_str_ind=[str(ind) for ind in population]
+            offspring_str_ind=[str(ind) for ind in offspring]
+            # intersect pop_str_ind and offspring_str_ind to find individuals that have been altered in the varOr function
+            intera_pop_offspring=list(set(pop_str_ind).intersection(set(offspring_str_ind)))
+            if len(intera_pop_offspring)>0:
+                print("After mutation, there are common individuals in the population and offspring")
+
+
         else:  # Apply reproduction
             idx = np.random.randint(0, len(population))
             offspring.append(toolbox.clone(population[idx]))
@@ -263,8 +371,27 @@ def eaMuPlusLambda(population, toolbox, mu, lambda_, cxpb, mutpb, ngen, pbar,
 
         offspring = toolbox.evaluate(offspring)
 
+        print('Before')
+        for ind in population:
+            print(str(ind))
+            print("\n")
+        
+        
+        pop_str_ind=[str(ind) for ind in population]
+        offspring_str_ind=[str(ind) for ind in offspring]
+        # intersect pop_str_ind and offspring_str_ind to find individuals that have been altered in the varOr function
+        intera_pop_offspring=list(set(pop_str_ind).intersection(set(offspring_str_ind)))
+        if len(intera_pop_offspring)>0:
+            print("There are common individuals in the population and offspring")
+
+
         # Select the next generation population
         population[:] = toolbox.select(population + offspring, mu)
+        print('\n')
+        print('After')
+        for ind in population:
+            print(str(ind))
+            print("\n")
 
         # pbar process
         if not pbar.disable:
@@ -302,7 +429,7 @@ def eaMuPlusLambda(population, toolbox, mu, lambda_, cxpb, mutpb, ngen, pbar,
 
     return population, logbook
 
-
+# current cxOnePoint of TPOT 
 def cxOnePoint(ind1, ind2):
     """Randomly select in each individual and exchange each subtree with the
     point as root between each individual.
@@ -314,6 +441,7 @@ def cxOnePoint(ind1, ind2):
     types1 = defaultdict(list)
     types2 = defaultdict(list)
 
+    
     for idx, node in enumerate(ind1[1:], 1):
         types1[node.ret].append(idx)
     common_types = []
@@ -330,9 +458,22 @@ def cxOnePoint(ind1, ind2):
 
         slice1 = ind1.searchSubtree(index1)
         slice2 = ind2.searchSubtree(index2)
+        
+        
         ind1[slice1], ind2[slice2] = ind2[slice2], ind1[slice1]
 
     return ind1, ind2
+
+def type_of_string(candi):
+    if candi.isnumeric():
+        return "int"
+    elif candi.isnumeric()==False:
+        try:
+            float(candi)
+            return "float"
+
+        except ValueError:
+            return "booleanOrClass"
 
 def convert_to_type(strcandi,typetemp):
     if typetemp=="int":
@@ -349,17 +490,6 @@ def convert_to_type(strcandi,typetemp):
     else:
         return None
         
-def type_of_string(candi):
-    if candi.isnumeric():
-        return "int"
-    elif candi.isnumeric()==False:
-        try:
-            float(candi)
-            return "float"
-
-        except ValueError:
-            return "booleanOrClass"
-
 def closest_terminal(terminals,beta_ind1_value, beta_ind1_value_type):
     diff=float("inf")
     for ter in terminals:
@@ -375,6 +505,11 @@ def closest_terminal(terminals,beta_ind1_value, beta_ind1_value_type):
     
     return closest_terminal_ele
 
+def is_applicable_to_SBX(node1_arity,node1_name, len_ind1_slice1, node2_arity, node2_name,len_ind2_slice2):
+    if node1_arity == 0 and node1_name != 'ARG0' and len_ind1_slice1==1  and node2_arity == 0 and node2_name != 'ARG0' and len_ind2_slice2==1:
+        return True
+    else:
+        return False
 
 def cxHybridOnePoint(ind1, ind2, eta, pset):
     """This function is based on cxOnePoint.
@@ -385,10 +520,7 @@ def cxHybridOnePoint(ind1, ind2, eta, pset):
     point as root between each individual.
     :param ind1: First tree participating in the crossover.
     :param ind2: Second tree participating in the crossover.
-    :eta: parameter used in the simulated binary crossover operator.
-    :pset: 
     :returns: A tuple of two trees.
-    :
     """
     # List all available primitive types in each individual
     types1 = defaultdict(list)
@@ -418,18 +550,14 @@ def cxHybridOnePoint(ind1, ind2, eta, pset):
         slice1 = ind1.searchSubtree(index1)
         slice2 = ind2.searchSubtree(index2)
 
-        
         # When the selected node is a terminal, SBX is applied.
-        if node1.arity == 0 and node1.name != 'ARG0' and len(ind1[slice1])==1  and node2.arity == 0 and node2.name != 'ARG0' and len(ind2[slice2])==1 :
-               
+        # if node1.arity == 0 and node1.name != 'ARG0' and len(ind1[slice1])==1  and node2.arity == 0 and node2.name != 'ARG0' and len(ind2[slice2])==1 :
+        is_applicable_to_SBX_Boolean=is_applicable_to_SBX(node1.arity, node1.name, len(ind1[slice1]), node2.arity, node2.name, len(ind2[slice2]))
+        if is_applicable_to_SBX_Boolean:       
+
             ind1_value_string = ind1[slice1][0].value.split("=")
             ind2_value_string = ind2[slice2][0].value.split("=")
 
-
-            # ExtraTreesClassifier__bootstrap=True
-            # ExtraTreesClassifier__bootstrap=False
-            # ExtraTreesClassifier__criterion=gini
-            # ExtraTreesClassifier__criterion=entropy
 
             # check second value is float, int, or boolean
             res1=type_of_string(ind1_value_string[1])
@@ -473,6 +601,7 @@ def cxHybridOnePoint(ind1, ind2, eta, pset):
             ind1[slice1], ind2[slice2] = ind2[slice2], ind1[slice1]
         
     return ind1, ind2
+
 
 
 def mutPrimitiveReplacement(individual, pset):
