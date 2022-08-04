@@ -328,7 +328,7 @@ class TPOTBase(BaseEstimator):
         self.disable_update_check = disable_update_check
         self.random_state = random_state
         self.log_file = log_file
-        self.pareto_fitness_tracker_dict = {'pipeline': [], 'cv_score': [], 'generation': [], 'holdout_score': [], 'roc_auc' : []} 
+        self.pareto_fitness_tracker_dict = {'pipeline': [], 'cv_score': [], 'generation': [], 'holdout_score': [], 'holdout_roc_auc_score' : []} 
         self.current_gen = 0
         self.primitive_mutation_rate = [0.9]
         self.fitness_tracker_dict = {'operator_count': [], 'score': [], 'generation': []} if track_fitnesses else None
@@ -862,6 +862,7 @@ class TPOTBase(BaseEstimator):
                     per_generation_function=self._check_periodic_pipeline,
                     log_file=self.log_file_,
                     parents_fitnesses=self.parents_fitnesses,
+                    dynamic_rates=self.dynamic_rates,
                 )
 
         # Allow for certain exceptions to signal a premature fit() cancellation
@@ -1864,11 +1865,11 @@ class TPOTBase(BaseEstimator):
                         self.test_x.astype(np.float64),
                         self.test_y.astype(np.float64),
                     )
-                    self.pareto_fitness_tracker_dict['roc_auc'].append(auc_score)
-                    
+                    self.pareto_fitness_tracker_dict['holdout_roc_auc_score'].append(auc_score)
                 else: 
                     self.pareto_fitness_tracker_dict['holdout_score'].append(0)
-                    self.pareto_fitness_tracker_dict['roc_auc'].append(0)
+                    self.pareto_fitness_tracker_dict['holdout_roc_auc_score'].append(0)
+
                 
     
 
@@ -1919,8 +1920,19 @@ class TPOTBase(BaseEstimator):
         
         #return 0.8*math.cos(0.23*self.current_gen)/2+0.5
         #if self.current_gen > 1  and len(self.pareto_fitness_tracker_dict['cv_score']) > 0:
-        if len(self.parents_fitnesses) > 0 and len(self.offspring_fitnesses) > 0:
-            score_delta = sum([y[0] for y in self.offspring_fitnesses]) / len(self.offspring_fitnesses) - sum([y[0] for y in self.parents_fitnesses]) / len(self.parents_fitnesses) 
+        if len(self.parents_fitnesses) > 0 and len(self.offspring_fitnesses) >= self.population_size*2:
+            previousgen = [y[0] for y in self.offspring_fitnesses[-self.population_size*2:-self.population_size]]
+            currentgen = [y[0] for y in self.offspring_fitnesses[-self.population_size:]]
+            previousgen = np.array([y[0] for y in self.offspring_fitnesses[-self.population_size*2:-self.population_size]])
+            previousgen = previousgen[previousgen > 0]
+            previousgen = previousgen[previousgen < 1E308]
+            previousgen = np.nansum(previousgen)/len(previousgen)
+            currentgen = np.array([y[0] for y in self.offspring_fitnesses[-self.population_size:]])
+            currentgen = currentgen[currentgen > 0]
+            currentgen = currentgen[currentgen < 1E308]
+            currentgen = np.nansum(currentgen)/len(currentgen)
+            score_delta = currentgen-previousgen 
+
             
             #df = pd.DataFrame(self.pareto_fitness_tracker_dict)
             #score_delta = abs(df[df['generation'] == self.current_gen-1]['cv_score'].mean() - df[df['generation'] == self.current_gen-2]['cv_score'].mean())
@@ -1928,6 +1940,7 @@ class TPOTBase(BaseEstimator):
             score_delta = 0
         #return 0.85*(1/math.exp(0.05*(self.current_gen-3)**2+0.1*(1-score_delta)**2)) + 0.15
         self.primitive_mutation_rate.append(0.8*math.cos(0.23*self.current_gen -3.1415*(score_delta)/0.5)/2+0.5)
+
 
     @_pre_test
     def _mate_operator(self, ind1, ind2):

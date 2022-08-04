@@ -40,16 +40,21 @@ if __name__ == "__main__":
 
     #args.dataset = "./datasets/Concrete.csv"
     args.labelname = "target"
+
     gen_fitnesses_dir = "/common/matsumoton/results/gen_fitnesses" 
     pareto_fitnesses_dir = "/common/matsumoton/results/pareto_fitnesses" 
     offspring_dir = "/common/matsumoton/results/offspring_generation_test"
     resource_logging_dir = "/common/matsumoton/results/resource_logging"
     pipeline_dir = "/common/matsumoton/results/pipelines"
+    
     create_dirs(gen_fitnesses_dir)
     create_dirs(pareto_fitnesses_dir)
     create_dirs(offspring_dir)
     create_dirs(resource_logging_dir)
     create_dirs(pipeline_dir)
+
+    pareto_fitnesses_dir = "/common/matsumoton/results_3/pareto_fitnesses" 
+    create_dirs(pareto_fitnesses_dir)
 
     print('digen'+str(args.dataset_num))
 
@@ -59,34 +64,7 @@ if __name__ == "__main__":
 
     #random.seed(5)
     #np.random.seed(5)
-<<<<<<< HEAD
-    for gen in range(2,11):
-        for idx_run in range(args.runstart, args.runend):
-            print(idx_run)
-            #df = pd.read_csv(args.dataset, sep=',')
-            dump_file_name = 'digen' + str(args.dataset_num) + '_run_' +str(idx_run)
-            X, Y = extract_labels(args.dataset, args.labelname)
-            X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.8,random_state=5)
-=======
->>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
-
-            pipeline_optimizer = get_optimizer(args.classification, gens=args.gen - 1, pop_size=args.pop,
-                                            offspr_size=args.pop, scoring=args.scoring, track_fitnesses=True,
-                                            track_generations=True, resource_logging=True)
-            pipeline_optimizer.fit(X_train, Y_train)
-
-<<<<<<< HEAD
-            ev_dump_file = f"{gen_fitnesses_dir}/{dump_file_name}_evolution_pop{args.pop}_gen{args.gen}.csv"
-            offspring_dump_file = f"{offspring_dir}/{dump_file_name}_pop{args.pop}_gen{args.pop}"
-            resource_logging_dump_file = f"{resource_logging_dir}/{dump_file_name}_pop{args.pop}_gen{args.gen}"
-            pipeline_optimizer.dump_fitness_tracker(ev_dump_file)
-            pipeline_optimizer.dump_parents_offspring_fitnesses(offspring_dump_file)
-            pipeline_optimizer.dump_resource_logging(resource_logging_dump_file)
-            pipeline_optimizer.dump_pareto_fitness_tracker(ev_dump_file)
-            
-            #with open(f"{pipeline_dir}/{dump_file_name}_final.pkl", 'wb') as outp:
-            #    pickle.dump(pipeline_optimizer, outp, -1)
-=======
+    for idx_run in range(args.runstart, args.runend):
         #pipeline_optimizer = get_optimizer(args.classification, gens=args.gen, pop_size=args.pop_random_sampling,
         #                                   offspr_size=args.pop_random_sampling, scoring=args.scoring,
         #                                   track_fitnesses=True,track_generations=True,resource_logging=True)
@@ -102,20 +80,22 @@ if __name__ == "__main__":
         # one generation is evaluated outside the number of generations (DEAP based)
         pipeline_optimizer = get_optimizer(args.classification, gens=args.gen - 1, pop_size=args.pop,
                                            offspr_size=args.pop, scoring=args.scoring, track_fitnesses=True,
-                                           track_generations=True, resource_logging=True, test_x = X_test, test_y = Y_test)
+                                           track_generations=True, resource_logging=True, test_x = X_test, test_y = Y_test,cv=10)
+
         pipeline_optimizer.fit(X_train, Y_train)
 
         ev_dump_file = f"{gen_fitnesses_dir}/{dump_file_name}_evolution_pop{args.pop}_gen{args.gen}.csv"
         ev_pareto_dump_file = f"{pareto_fitnesses_dir}/{dump_file_name}_evolution_pop{args.pop}_gen{args.gen}.csv"
+        ev_mutation_rate_dump_file = f"{pareto_fitnesses_dir}/{dump_file_name}_evolution_pop{args.pop}_gen{args.gen}_mutrate.csv"
+
         offspring_dump_file = f"{offspring_dir}/{dump_file_name}_pop{args.pop}_gen{args.pop}"
         resource_logging_dump_file = f"{resource_logging_dir}/{dump_file_name}_pop{args.pop}_gen{args.gen}"
         pipeline_optimizer.dump_fitness_tracker(ev_dump_file)
         pipeline_optimizer.dump_parents_offspring_fitnesses(offspring_dump_file)
         pipeline_optimizer.dump_resource_logging(resource_logging_dump_file)
         pipeline_optimizer.dump_pareto_fitness_tracker(ev_pareto_dump_file)
-        
-        
+        pipeline_optimizer.dump_primitives_mutations(ev_mutation_rate_dump_file)
 
         with open(f"{pipeline_dir}/{dump_file_name}_evaluated_individuals.pkl", 'wb') as outp:
             pickle.dump(pipeline_optimizer.evaluated_individuals_, outp, -1)
->>>>>>> 202e570dbacf4a0175fd2e44312017a3947e9235
+
