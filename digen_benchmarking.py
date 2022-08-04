@@ -9,8 +9,19 @@ import random
 import numpy as np
 
 import sys
-sys.path.append('/common/matsumoton/git/digen')
+sys.path.append('./digen')
 from digen import Benchmark
+
+#import openml
+# Get dataset by ID
+#dataset = openml.datasets.get_dataset(61)
+
+# Get dataset by name
+#dataset = openml.datasets.get_dataset('Fashion-MNIST')
+
+
+# Get the data itself as a dataframe (or otherwise)
+#X, y, _, _ = dataset.get_data(dataset_format="dataframe")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -29,11 +40,15 @@ if __name__ == "__main__":
 
     #args.dataset = "./datasets/Concrete.csv"
     args.labelname = "target"
-    gen_fitnesses_dir = "/common/matsumoton/results_3/gen_fitnesses" 
-    offspring_dir = "/common/matsumoton/results_3/offspring_generation_test"
-    resource_logging_dir = "/common/matsumoton/results_3/resource_logging"
-    pipeline_dir = "/common/matsumoton/results_3/pipelines"
+
+    gen_fitnesses_dir = "/common/matsumoton/results/gen_fitnesses" 
+    pareto_fitnesses_dir = "/common/matsumoton/results/pareto_fitnesses" 
+    offspring_dir = "/common/matsumoton/results/offspring_generation_test"
+    resource_logging_dir = "/common/matsumoton/results/resource_logging"
+    pipeline_dir = "/common/matsumoton/results/pipelines"
+    
     create_dirs(gen_fitnesses_dir)
+    create_dirs(pareto_fitnesses_dir)
     create_dirs(offspring_dir)
     create_dirs(resource_logging_dir)
     create_dirs(pipeline_dir)
@@ -49,14 +64,7 @@ if __name__ == "__main__":
 
     #random.seed(5)
     #np.random.seed(5)
-
     for idx_run in range(args.runstart, args.runend):
-        print(idx_run)
-        #df = pd.read_csv(args.dataset, sep=',')
-        dump_file_name = 'digen' + str(args.dataset_num) + '_run_' +str(idx_run)
-        X, Y = extract_labels(args.dataset, args.labelname)
-        X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.8,random_state=5)
-
         #pipeline_optimizer = get_optimizer(args.classification, gens=args.gen, pop_size=args.pop_random_sampling,
         #                                   offspr_size=args.pop_random_sampling, scoring=args.scoring,
         #                                   track_fitnesses=True,track_generations=True,resource_logging=True)
@@ -73,11 +81,13 @@ if __name__ == "__main__":
         pipeline_optimizer = get_optimizer(args.classification, gens=args.gen - 1, pop_size=args.pop,
                                            offspr_size=args.pop, scoring=args.scoring, track_fitnesses=True,
                                            track_generations=True, resource_logging=True, test_x = X_test, test_y = Y_test,cv=10)
+
         pipeline_optimizer.fit(X_train, Y_train)
 
         ev_dump_file = f"{gen_fitnesses_dir}/{dump_file_name}_evolution_pop{args.pop}_gen{args.gen}.csv"
         ev_pareto_dump_file = f"{pareto_fitnesses_dir}/{dump_file_name}_evolution_pop{args.pop}_gen{args.gen}.csv"
         ev_mutation_rate_dump_file = f"{pareto_fitnesses_dir}/{dump_file_name}_evolution_pop{args.pop}_gen{args.gen}_mutrate.csv"
+
         offspring_dump_file = f"{offspring_dir}/{dump_file_name}_pop{args.pop}_gen{args.pop}"
         resource_logging_dump_file = f"{resource_logging_dir}/{dump_file_name}_pop{args.pop}_gen{args.gen}"
         pipeline_optimizer.dump_fitness_tracker(ev_dump_file)
@@ -88,3 +98,4 @@ if __name__ == "__main__":
 
         with open(f"{pipeline_dir}/{dump_file_name}_evaluated_individuals.pkl", 'wb') as outp:
             pickle.dump(pipeline_optimizer.evaluated_individuals_, outp, -1)
+

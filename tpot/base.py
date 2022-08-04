@@ -92,6 +92,7 @@ from .gp_deap import (
     mutTerminalReplacement,
     _wrapped_cross_val_score,
     cxOnePoint,
+    cxHybridOnePoint,
 )
 
 try:
@@ -1868,6 +1869,7 @@ class TPOTBase(BaseEstimator):
                 else: 
                     self.pareto_fitness_tracker_dict['holdout_score'].append(0)
                     self.pareto_fitness_tracker_dict['holdout_roc_auc_score'].append(0)
+
                 
     
 
@@ -1930,6 +1932,7 @@ class TPOTBase(BaseEstimator):
             currentgen = currentgen[currentgen < 1E308]
             currentgen = np.nansum(currentgen)/len(currentgen)
             score_delta = currentgen-previousgen 
+
             
             #df = pd.DataFrame(self.pareto_fitness_tracker_dict)
             #score_delta = abs(df[df['generation'] == self.current_gen-1]['cv_score'].mean() - df[df['generation'] == self.current_gen-2]['cv_score'].mean())
@@ -1943,7 +1946,12 @@ class TPOTBase(BaseEstimator):
     def _mate_operator(self, ind1, ind2):
         for _ in range(self._max_mut_loops):
             ind1_copy, ind2_copy = self._toolbox.clone(ind1), self._toolbox.clone(ind2)
+            
             offspring, offspring2 = cxOnePoint(ind1_copy, ind2_copy)
+
+            # Higher eta will cause to generate parent-like kids.
+            # eta=1
+            # offspring, offspring2 = cxHybridOnePoint(ind1_copy, ind2_copy,eta,self._pset) 
 
             if str(offspring) not in self.evaluated_individuals_:
                 # We only use the first offspring, so we do not care to check uniqueness of the second.

@@ -68,6 +68,11 @@ classifier_config_dict = {
         'bootstrap': [True, False]
     },
 
+    'sklearn.ensemble.AdaBoostClassifier': {
+        'n_estimators': [50,100],
+        'learning_rate': [1e-3, 1e-2, 1e-1, 0.5, 1.]
+    },
+
     'sklearn.ensemble.GradientBoostingClassifier': {
         'n_estimators': [100],
         'learning_rate': [1e-3, 1e-2, 1e-1, 0.5, 1.],
