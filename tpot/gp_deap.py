@@ -30,6 +30,7 @@ from .operator_utils import set_sample_weight
 from sklearn.utils import indexable
 from sklearn.metrics import check_scoring
 from sklearn.model_selection._validation import _fit_and_score
+import math
 
 from sklearn.base import clone
 from collections import defaultdict
@@ -93,8 +94,11 @@ def mutate_random_individual(population, toolbox, parents_fitnesses=None):
     del ind.fitness.values
     return ind
 
+def crossover_sigmoid_threshold(generation):
+    #return 1/(1+math.exp(-0.5*(generation-8)))*0.9 + 0.1
+    return 0.8*math.cos(0.23*generation+3.1415)/2+0.5
 
-def varOr(population, toolbox, lambda_, cxpb, mutpb, parents_fitnesses=None):
+def varOr(population, toolbox, lambda_, cxpb, mutpb, gen, parents_fitnesses=None):
     """Part of an evolutionary algorithm applying only the variation part
     (crossover, mutation **or** reproduction). The modified individuals have
     their fitness invalidated. The individuals are cloned so returned
@@ -105,6 +109,7 @@ def varOr(population, toolbox, lambda_, cxpb, mutpb, parents_fitnesses=None):
     :param lambda\_: The number of children to produce
     :param cxpb: The probability of mating two individuals.
     :param mutpb: The probability of mutating an individual.
+    :param gen: The current generation
     :returns: The final population
     :returns: A class:`~deap.tools.Logbook` with the statistics of the
               evolution
@@ -127,9 +132,10 @@ def varOr(population, toolbox, lambda_, cxpb, mutpb, parents_fitnesses=None):
     1 - *cxpb* - *mutpb*.
     """
     offspring = []
-
+    mutpb = 1-cxpb
     for _ in range(lambda_):
         op_choice = np.random.random()
+        
         if op_choice < cxpb:  # Apply crossover
             ind1, ind2 = pick_two_individuals_eligible_for_crossover(population)
             if ind1 is not None:
@@ -177,7 +183,7 @@ def initialize_stats_dict(individual):
 def eaMuPlusLambda(population, toolbox, mu, lambda_, cxpb, mutpb, ngen, pbar,
                    stats=None, halloffame=None, verbose=0,
                    per_generation_function=None, log_file=None,
-                   parents_fitnesses=None):
+                   parents_fitnesses=None,dynamic_rates=True):
     """This is the :math:`(\mu + \lambda)` evolutionary algorithm.
     :param population: A list of individuals.
     :param toolbox: A :class:`~deap.base.Toolbox` that contains the evolution
@@ -238,7 +244,11 @@ def eaMuPlusLambda(population, toolbox, mu, lambda_, cxpb, mutpb, ngen, pbar,
     # Begin the generational process
     for gen in range(1, ngen + 1):
         # Vary the population
-        offspring = varOr(population, toolbox, lambda_, cxpb, mutpb, parents_fitnesses)
+        
+        #dynamic crossover
+        cxpb = crossover_sigmoid_threshold(gen)
+        
+        offspring = varOr(population, toolbox, lambda_, cxpb, mutpb, gen, parents_fitnesses)
 
 
         # Update generation statistic for all individuals which have invalid 'generation' stats
@@ -323,6 +333,102 @@ def cxOnePoint(ind1, ind2):
 
     return ind1, ind2
 
+
+def mutPrimitiveReplacement(individual, pset):
+    """Replaces a randomly chosen primitive from *individual* by a randomly
+    chosen primitive no matter if it has the same number of arguments from the :attr:`pset`
+    attribute of the individual.
+    Parameters
+    ----------
+    individual: DEAP individual
+        A list of pipeline operators and model parameters that can be
+        compiled by DEAP into a callable function
+
+    Returns
+    -------
+    individual: DEAP individual
+        Returns the individual with one of point mutation applied to it
+
+    """
+
+    number_of_primitives = sum(
+        isinstance(node, gp.Primitive) for node in individual
+    )
+
+    index = np.random.randint(0, number_of_primitives)
+    node = individual[index]
+    slice_ = individual.searchSubtree(index)
+
+    # find next primitive if any
+    rindex = None
+    if index + 1 < len(individual):
+        for i, tmpnode in enumerate(individual[index + 1:], index + 1):
+            if isinstance(tmpnode, gp.Primitive) and tmpnode.ret in node.args:
+                rindex = i
+                break
+
+    # pset.primitives[node.ret] can get a list of the type of node
+    # for example: if op.root is True then the node.ret is Output_DF object
+    # based on the function _setup_pset. Then primitives is the list of classifor or regressor
+    primitives = pset.primitives[node.ret]
+
+    if len(primitives) != 0:
+        new_node = np.random.choice(primitives)
+        new_subtree = [None] * len(new_node.args)
+        if rindex:
+            rnode = individual[rindex]
+            rslice = individual.searchSubtree(rindex)
+            # find position for passing return values to next operator
+            position = np.random.choice([i for i, a in enumerate(new_node.args) if a == rnode.ret])
+        else:
+            position = None
+        for i, arg_type in enumerate(new_node.args):
+            if i != position:
+                term = np.random.choice(pset.terminals[arg_type])
+                if isclass(term):
+                    term = term()
+                new_subtree[i] = term
+        # paste the subtree to new node
+        if rindex:
+            new_subtree[position:position + 1] = individual[rslice]
+        # combine with primitives
+        new_subtree.insert(0, new_node)
+        individual[slice_] = new_subtree
+
+    return individual,
+
+def mutTerminalReplacement(individual, pset):
+    """Replaces a randomly chosen terminal (hyperparameter)
+
+    Parameters
+    ----------
+    individual: DEAP individual
+        A list of pipeline operators and model parameters that can be
+        compiled by DEAP into a callable function
+
+    Returns
+    -------
+    individual: DEAP individual
+        Returns the individual with one of point mutation applied to it
+
+    """
+
+    number_of_primitives = sum(
+        isinstance(node, gp.Primitive) for node in individual
+    )
+
+    index = np.random.randint(number_of_primitives, len(individual))
+    node = individual[index]
+    slice_ = individual.searchSubtree(index)
+
+    if node.arity == 0:  # Terminal
+        term = np.random.choice(pset.terminals[node.ret])
+        if isclass(term):
+            term = term()
+        individual[index] = term
+    
+
+    return individual,
 
 # point mutation function
 def mutNodeReplacement(individual, pset):
